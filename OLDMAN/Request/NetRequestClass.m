@@ -1,0 +1,235 @@
+//
+//  NetRequestClass.m
+//  MVVMTest
+//
+//
+
+#import "NetRequestClass.h"
+#import "MyMD5.h"
+#import "NSFileManager+Method.h"//判断请求超时
+
+@interface NetRequestClass ()
+
+@end
+
+
+@implementation NetRequestClass
+
+#pragma 监测网络的可链接性
++(BOOL)checkNetworkStates
+{
+    __block BOOL netState = NO;
+    
+    //1.创建网络监测者
+    AFNetworkReachabilityManager * manager = [AFNetworkReachabilityManager sharedManager];
+    
+    /*枚举里面四个状态  分别对应 未知 无网络 数据 WiFi
+     typedef NS_ENUM(NSInteger, AFNetworkReachabilityStatus) {
+     AFNetworkReachabilityStatusUnknown          = -1,      未知
+     AFNetworkReachabilityStatusNotReachable     = 0,       无网络
+     AFNetworkReachabilityStatusReachableViaWWAN = 1,       蜂窝数据网络
+     AFNetworkReachabilityStatusReachableViaWiFi = 2,       WiFi
+     };
+     */
+    
+    [manager setReachabilityStatusChangeBlock:^(AFNetworkReachabilityStatus status) {
+        //这里是监测到网络改变的block  可以写成switch方便
+        //在里面可以随便写事件
+        switch (status) {
+            case AFNetworkReachabilityStatusUnknown:
+                NSLog(@"未知网络状态");
+                netState = YES;
+                break;
+                
+            case AFNetworkReachabilityStatusNotReachable:
+                NSLog(@"无网络");
+                netState = NO;
+                break;
+                
+            case AFNetworkReachabilityStatusReachableViaWWAN:
+                NSLog(@"蜂窝数据网");
+                netState = YES;
+                break;
+                
+            case AFNetworkReachabilityStatusReachableViaWiFi:
+                NSLog(@"WiFi网络");
+                netState = YES;
+                break;
+                
+            default:
+                break;
+        }
+        
+    }] ;
+    
+    return netState;
+}
+
+
+/***************************************
+ 在这做判断如果有dic里有errorCode
+ 调用errorBlock(dic)
+ 没有errorCode则调用block(dic
+ ******************************/
+
+//#pragma --mark GET请求方式
+//+ (void) NetRequestGETWithRequestURL: (NSString *) requestURLString WithParameter: (NSDictionary *) parameter WithReturnValeuBlock: (ReturnValueBlock) block WithErrorCodeBlock: (ErrorCodeBlock) errorBlock WithFailureBlock: (FailureBlock) failureBlock
+//{
+//
+//    //设置一个缓存路径
+//    NSArray * paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
+//    NSString * path = [[paths objectAtIndex:0] stringByAppendingFormat:@"/Caches/%@",[MyMD5 md5:requestURLString]];
+//    
+//    //判断文件存在 且 超时 重新下载 ，否则读缓存
+//    NSFileManager * NsManager=[NSFileManager defaultManager];
+//    if ([NsManager fileExistsAtPath:path] && [NsManager timeOutFileName:[MyMD5 md5:requestURLString] time:60*30]) {
+//        
+//        AFHTTPRequestOperationManager * manager = [[AFHTTPRequestOperationManager alloc] init];
+//        [manager GET:path parameters:parameter success:^(AFHTTPRequestOperation *operation, id responseObject) {
+//            
+//        } failure:^(AFHTTPRequestOperation * operation, NSError *error) {
+//            NSMutableData * data=[NSMutableData dataWithContentsOfFile:path];//使用缓存
+//            NSDictionary * dic = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error:nil];
+//            block(dic);
+//        }];
+//    }
+//    else{
+//        //开始网络请求
+//        AFHTTPRequestOperationManager * manager = [[AFHTTPRequestOperationManager alloc] init];
+//        AFHTTPRequestOperation * op = [manager GET:requestURLString parameters:parameter success:^(AFHTTPRequestOperation *operation, id responseObject) {
+//            
+//            //当请求成功的时候,把请求数据保存在我们的沙盒目录下
+//            [responseObject writeToFile:path atomically:YES];
+//            
+//            NSDictionary * dic = [NSJSONSerialization JSONObjectWithData:responseObject options:NSJSONReadingAllowFragments error:nil];
+//            //DDLog(@"%@", dic);
+//            block(dic);
+//            
+//        } failure:^(AFHTTPRequestOperation * operation, NSError *error) {
+//            
+//            //判断文件存在
+//            NSFileManager * manager=[NSFileManager defaultManager];
+//            if ([manager fileExistsAtPath:path]) {
+//                NSMutableData * data=[NSMutableData dataWithContentsOfFile:path];//使用缓存
+//                NSDictionary * dic = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error:nil];
+//                block(dic);
+//            }
+//            failureBlock();
+//        }];
+//        
+//        op.responseSerializer = [AFHTTPResponseSerializer serializer];
+//        
+//        [op start];
+//    }
+//}
+//
+//
+//
+#pragma --mark POST请求方式
++ (void) NetRequestPOSTWithRequestURL: (NSString *) requestURLString WithParameter: (NSDictionary *) parameter WithReturnValeuBlock: (ReturnValueBlock) block WithErrorCodeBlock: (ErrorCodeBlock) errorBlock WithFailureBlock: (FailureBlock) failureBlock
+{
+    //设置请求
+    AFHTTPSessionManager * manager = [AFNetworkManager sharedHTTPSession];
+    //请求格式
+    manager.requestSerializer = [AFHTTPRequestSerializer serializer];
+    //返回格式
+    manager.responseSerializer = [AFHTTPResponseSerializer serializer];
+    // 设置超时时间
+    [manager.requestSerializer willChangeValueForKey:@"timeoutInterval"];
+    manager.requestSerializer.timeoutInterval = 10.0f;
+    [manager.requestSerializer didChangeValueForKey:@"timeoutInterval"];
+    
+    
+    //设置一个缓存路径
+    NSArray * paths = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
+    NSString * path = [[paths objectAtIndex:0] stringByAppendingFormat:@"/Caches/%@",[MyMD5 md5:requestURLString]];
+    
+    //开始网络请求
+    [manager POST:requestURLString parameters:parameter progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+        
+        //当请求成功的时候,把请求数据保存在我们的沙盒目录下
+        [responseObject writeToFile:path atomically:YES];
+        
+        NSDictionary * dic = [NSJSONSerialization JSONObjectWithData:responseObject options:NSJSONReadingAllowFragments error:nil];
+        
+        block(dic);
+        
+    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        
+        //NSLog(@"%@",error);
+
+        //请求失败  判断缓存文件存在
+        NSFileManager * manager=[NSFileManager defaultManager];
+        if ([manager fileExistsAtPath:path]) {
+            NSMutableData * data=[NSMutableData dataWithContentsOfFile:path];//使用缓存
+            NSDictionary * dic = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error:nil];
+            block(dic);
+        }
+        failureBlock();
+    }];
+
+}
+
+
+
+#pragma --mark POST 注册/登录
+//+ (void) NetRequestLoginRegWithRequestURL: (NSString *) requestURLString WithParameter: (NSDictionary *) parameter WithReturnValeuBlock: (ReturnValueBlock) block WithErrorCodeBlock: (ErrorCodeBlock) errorBlock WithFailureBlock: (FailureBlock) failureBlock
+//{
+//    AFHTTPRequestOperationManager * manager = [[AFHTTPRequestOperationManager alloc] init];
+//    
+//    //设置超时时间
+//    [manager.requestSerializer willChangeValueForKey:@"timeoutInterval"];
+//    manager.requestSerializer.timeoutInterval=10.0f;
+//    [manager.requestSerializer didChangeValueForKey:@"timeoutInterval"];
+//
+//    AFHTTPRequestOperation * op = [manager POST:requestURLString parameters:parameter success:^(AFHTTPRequestOperation *operation, id responseObject) {
+//        
+//        NSDictionary * dic = [NSJSONSerialization JSONObjectWithData:responseObject options:NSJSONReadingAllowFragments error:nil];
+//        
+//        block(dic);
+//        
+//    } failure:^(AFHTTPRequestOperation * operation, NSError *error) {
+//        failureBlock();
+//    }];
+//    
+//    op.responseSerializer = [AFHTTPResponseSerializer serializer];
+//    
+//    [op start];
+//    
+//}
+
++ (void) NetRequestLoginRegWithRequestURL: (NSString *) requestURLString WithParameter: (NSDictionary *) parameter WithReturnValeuBlock: (ReturnValueBlock) block WithErrorCodeBlock: (ErrorCodeBlock) errorBlock WithFailureBlock: (FailureBlock) failureBlock
+{
+    
+    AFHTTPSessionManager * manager = [AFNetworkManager sharedHTTPSession];
+    
+    //请求格式
+    manager.requestSerializer = [AFHTTPRequestSerializer serializer];
+    
+    //返回格式
+    manager.responseSerializer = [AFHTTPResponseSerializer serializer];
+    
+    // 设置超时时间
+    [manager.requestSerializer willChangeValueForKey:@"timeoutInterval"];
+    manager.requestSerializer.timeoutInterval = 10.0f;
+    [manager.requestSerializer didChangeValueForKey:@"timeoutInterval"];
+    
+    
+    [manager POST:requestURLString parameters:parameter progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+        
+        NSDictionary * dic = [NSJSONSerialization JSONObjectWithData:responseObject options:NSJSONReadingAllowFragments error:nil];
+        
+        block(dic);
+        
+    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        
+        //NSLog(@"%@",error);
+        
+        failureBlock();
+    }];
+}
+
+
+
+
+@end
